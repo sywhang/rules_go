@@ -49,6 +49,9 @@ func init() {
 	if err := analysis.Validate(analyzers); err != nil {
 		log.Fatal(err)
 	}
+	sort.Slice(analyzers, func(i, j int) bool {
+		return analyzers[i].Name < analyzers[j].Name
+	})
 }
 
 var typesSizes = types.SizesFor("gc", os.Getenv("GOARCH"))
@@ -198,6 +201,7 @@ func checkPackage(analyzers []*analysis.Analyzer, packagePath string, packageFil
 	if err != nil {
 		return "", nil, fmt.Errorf("error loading package: %v", err)
 	}
+
 	for _, act := range actions {
 		act.pkg = pkg
 	}
@@ -233,15 +237,9 @@ func (act *action) String() string {
 }
 
 func execAll(actions []*action) {
-	var wg sync.WaitGroup
-	wg.Add(len(actions))
 	for _, act := range actions {
-		go func(act *action) {
-			defer wg.Done()
-			act.exec()
-		}(act)
+		act.exec()
 	}
-	wg.Wait()
 }
 
 func (act *action) exec() { act.once.Do(act.execOnce) }
@@ -249,6 +247,13 @@ func (act *action) exec() { act.once.Do(act.execOnce) }
 func (act *action) execOnce() {
 	// Analyze dependencies.
 	execAll(act.deps)
+
+	/*
+		f, _ := os.OpenFile("/tmp/nogo.log",
+			os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		defer f.Close()
+		f.WriteString(act.a.Name + "\n")
+	*/
 
 	// Report an error if any dependency failed.
 	var failed []string
@@ -465,6 +470,9 @@ func checkAnalysisResults(actions []*action, pkg *goPackage) string {
 
 	sort.Slice(diagnostics, func(i, j int) bool {
 		return diagnostics[i].Pos < diagnostics[j].Pos
+	})
+	sort.Slice(errs, func(i, j int) bool {
+		return errs[i].Error() < errs[j].Error()
 	})
 	errMsg := &bytes.Buffer{}
 	sep := ""
